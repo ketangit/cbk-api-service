@@ -1,0 +1,125 @@
+# ------------------------------------------------------------------------------
+# cbk-api-service — Build a GraalVM native image and deploy to Cloud Run.
+#
+# Flow (push to main): authenticate to GCP via Workload Identity Federation
+# (no long-lived JSON keys), build a native OCI image with buildpacks, push it
+# to Artifact Registry, then deploy to Cloud Run.
+#
+# Security hardening applied:
+#   * Every action is pinned to a full 40-char commit SHA (tag comment is docs).
+#   * Top-level token permissions are denied; jobs request only what they need.
+#     The deploy job needs `id-token: write` (to mint the OIDC token for WIF)
+#     and `contents: read`.
+#   * Keyless auth via WIF — no service-account JSON key is ever stored.
+#   * checkout uses persist-credentials: false.
+#   * ubuntu-latest is used so the native image is built for linux/amd64,
+#     matching the Cloud Run execution environment.
+#   * Concurrency prevents overlapping deploys of the same ref.
+# ------------------------------------------------------------------------------
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-api-${{ github.ref }}
+  cancel-in-progress: false
+
+# Sensitive GCP identifiers (project id, WIF provider, service-account email) live
+# in GitHub Secrets, not here. The `secrets` context is unavailable in workflow- and
+# job-level `env`, so the project id and the IMAGE ref (which embeds it) are resolved
+# in steps below (see "Compose image reference").
+env:
+  GCP_REGION: us-east4
+  CLOUD_RUN_SERVICE: cbk-api-service
+
+jobs:
+  verify:
+    name: Format check & tests (JVM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'maven'
+
+      - name: Spotless check
+        run: ./mvnw -B spotless:check
+
+      - name: Unit tests
+        run: ./mvnw -B test
+
+  deploy:
+    name: Build native image & deploy to Cloud Run
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://api.craftedbyk.com
+    permissions:
+      contents: read
+      id-token: write # required to request the OIDC token for WIF
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'maven'
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Compose image reference
+        # Immutable, content-addressable tag (commit SHA) instead of :latest.
+        # Built here (not in top-level env) because it embeds the secret project id.
+        run: |
+          echo "IMAGE=${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${CLOUD_RUN_SERVICE}/api:${{ github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build native image (buildpacks, linux/amd64)
+        run: >-
+          ./mvnw -B -Pnative spring-boot:build-image
+          -DskipTests
+          -Dspring-boot.build-image.imageName=${{ env.IMAGE }}
+
+      - name: Push image to Artifact Registry
+        run: docker push ${{ env.IMAGE }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3
+        with:
+          service: ${{ env.CLOUD_RUN_SERVICE }}
+          region: ${{ env.GCP_REGION }}
+          image: ${{ env.IMAGE }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}

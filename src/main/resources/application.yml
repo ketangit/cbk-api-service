@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: cbk-api-service
+
+server:
+  port: ${PORT:8080} # Cloud Run injects PORT; default 8080 for local runs.
+  shutdown: graceful
+  compression: # Compression for SVG/JSON payloads
+    enabled: true
+    mime-types: application/json,image/svg+xml,text/html,text/css,application/javascript
+    min-response-size: 1024 # Compress responses larger than 1KB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
