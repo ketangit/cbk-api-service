@@ -13,21 +13,7 @@ Registry. Authentication to GCP is keyless via **Workload Identity Federation**.
 | Build         | Maven (wrapper) + `native-maven-plugin` (GraalVM AOT)        |
 | Image build   | `spring-boot:build-image` (Paketo buildpacks, `BP_NATIVE_IMAGE`) |
 | Formatting    | Spotless (google-java-format, GOOGLE style)                  |
-| Runtime       | Cloud Run (linux/amd64)                                      |
-| Registry      | Artifact Registry (`us-east4`)                               |
-
-## Local development
-
-```bash
-./mvnw spring-boot:run                 # run on http://localhost:8080
-curl localhost:8080/api/puzzle/health  # -> {"status":"ok"}
-./mvnw spotless:apply                  # auto-format
-./mvnw spotless:check                  # verify formatting (CI gate)
-./mvnw test                            # unit tests
-```
-
-> The Maven wrapper jar is **not** committed; `./mvnw` downloads it on first run
-> from the `wrapperUrl` in `.mvn/wrapper/maven-wrapper.properties`.
+| Runtime       | Google Cloud Run (linux/amd64)                                      |
 
 ## Building the native image locally
 
@@ -36,8 +22,30 @@ inside a container, so you do **not** need GraalVM installed locally):
 
 ```bash
 ./mvnw -Pnative spring-boot:build-image \
-  -Dspring-boot.build-image.imageName=us-east4-docker.pkg.dev/<your-gcp-project-id>/cbk-api-service/api:local
+  -Ddocker.image.name=us-east4-docker.pkg.dev/<your-gcp-project-id>/cbk-api-service/api:local
 ```
+
+> Override the image ref with **`-Ddocker.image.name`**, not
+> `-Dspring-boot.build-image.imageName`: the pom binds `<image><name>` to the
+> `docker.image.name` property, and an explicit `<name>` ignores the plugin's
+> own user-property.
+
+## Scripts
+
+Common commands (all via the Maven wrapper — no local Maven/GraalVM needed):
+
+| Command                                   | Does                                              |
+| ----------------------------------------- | ------------------------------------------------- |
+| `./mvnw spring-boot:run`                  | Run the app on `http://localhost:8080`            |
+| `./mvnw test`                             | Run unit tests                                    |
+| `./mvnw spotless:apply`                   | Auto-format (google-java-format)                  |
+| `./mvnw spotless:check`                   | Verify formatting — the CI gate                   |
+| `./mvnw -Pnative spring-boot:build-image -Ddocker.image.name=<ref>` | Build the GraalVM native OCI image (needs Docker) |
+| `gh workflow run "Deploy API"`            | Manually trigger the deploy workflow              |
+| `git push origin main`                    | Push to `main` → CI builds + deploys to Cloud Run |
+
+Deploys are automated: any push to `main` runs verify, then the native
+build/push/deploy job. No manual `gcloud` steps in the normal flow.
 
 ## CORS
 
@@ -54,9 +62,15 @@ Default-deny token permissions; all actions pinned to commit SHAs.
 - **deploy** (push to `main` / manual): authenticates to GCP via WIF, builds the
   native image on `ubuntu-latest` (so it is `linux/amd64`, matching Cloud Run),
   pushes to Artifact Registry tagged with the commit SHA, and deploys to Cloud
-  Run behind the `production` GitHub Environment.
+  Run behind the `production` GitHub Environment. Skipped on pull requests.
 
-### Pinned actions
+The image ref is composed at runtime from the `GCP_PROJECT_ID` secret + commit
+SHA and passed to the build via `-Ddocker.image.name` (the property the pom's
+`<image><name>` is bound to). The deploy step sets `--allow-unauthenticated`, so
+the public `allUsers → roles/run.invoker` binding is reasserted on every deploy
+and can't drift — the service fronts both the public site and the API.
+
+## Pinned actions
 
 | Action                              | Version | Commit SHA                                 |
 | ----------------------------------- | ------- | ------------------------------------------ |
@@ -65,7 +79,7 @@ Default-deny token permissions; all actions pinned to commit SHAs.
 | google-github-actions/auth          | v3      | `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093` |
 | google-github-actions/deploy-cloudrun | v3    | `2028e2d7d30a78c6910e0632e48dd561b064884d` |
 
-### GCP configuration
+## GCP configuration
 
 Sensitive identifiers are stored as **GitHub Secrets** (Settings → Secrets and
 variables → Actions), not committed to the workflow:
@@ -84,33 +98,27 @@ Non-sensitive values stay inline in `deploy.yml`:
 | Cloud Run service | `cbk-api-service`                                             |
 | Artifact Registry | `us-east4-docker.pkg.dev/<GCP_PROJECT_ID>/cbk-api-service/api` |
 
-### One-time GCP setup (outside this repo)
-
-1. **Artifact Registry** Docker repo `cbk-api-service` in `us-east4`.
-2. **Workload Identity Federation** pool `github-actions-pool` + provider
-   `github-provider`, with an attribute condition restricting to **this** repo,
-   e.g. `assertion.repository == 'YOUR_ORG/cbk-api-service'`.
-3. **Service account** `github-actions-sa` with the minimum roles:
-   `roles/run.admin`, `roles/artifactregistry.writer`,
-   `roles/iam.serviceAccountUser` (to act as the Cloud Run runtime SA), and bind
-   the WIF principal with `roles/iam.workloadIdentityUser`.
-4. Create a `production` GitHub Environment; require reviewers / restrict to
-   `main` as desired.
-
-Auth is keyless — no service-account JSON key is ever stored. The three GitHub
-Secrets above hold only non-credential GCP identifiers (project id, WIF provider
-path, SA email), kept out of source. The runtime `PORT` is provided by Cloud
-Run; the app reads it via `server.port=${PORT:8080}`.
 
 ## Project structure
 
 ```
-pom.xml
-mvnw, mvnw.cmd, .mvn/wrapper/maven-wrapper.properties
+pom.xml                         # Spring Boot 4, Java 25, spotless, native profile
+mvnw, mvnw.cmd                  # Maven wrapper (3.9.16); jar downloaded on first run
+.mvn/
+  jvm.config                    # --enable-native-access=ALL-UNNAMED (quiets JDK warning)
+  wrapper/maven-wrapper.properties
+.github/workflows/deploy.yml    # verify + native build/deploy to Cloud Run
 src/
   main/
-    java/com/fractalforge/puzzle/api/
-    resources/application.yml
-  test/java/com/fractalforge/puzzle/api/
-.github/workflows/deploy.yml
+    java/com/craftedbyk/puzzle/
+      FractalPuzzleApplication.java   # entry point
+      api/        # PuzzleController, request/response records, exception handler
+      config/     # CorsConfig, SecurityHeadersFilter, RateLimitFilter, WebConfig
+      generator/  # fractal jigsaw geometry + RNG (SinRandom / SecureRandomSource)
+      service/    # PuzzleService, PricingService, ExportMode, GeneratedPuzzle
+      shop/       # catalog + orders (controller, JPA entities, repositories)
+    resources/application.yml   # server, actuator, compression config
+  test/
+    java/com/craftedbyk/puzzle/ # api, generator, shop tests
+    resources/                  # golden-*.svg fixtures
 ```
