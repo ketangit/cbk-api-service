@@ -12,8 +12,8 @@ import org.springframework.web.filter.CorsFilter;
  *
  * <p>Allows the production site, Firebase Hosting preview channels, and the local Next.js dev
  * server to call the API. Patterns are used (not exact origins) so the dynamic per-PR preview
- * subdomains are covered; {@code allowedOriginPatterns} supports credentials safely. Adjust
- * {@code ALLOWED_ORIGIN_PATTERNS} when adding new front-end origins.
+ * subdomains are covered; {@code allowedOriginPatterns} supports credentials safely. Adjust {@code
+ * ALLOWED_ORIGIN_PATTERNS} when adding new front-end origins.
  */
 @Configuration
 public class CorsConfig {
