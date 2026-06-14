@@ -108,10 +108,14 @@ jobs:
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
       - name: Build native image (buildpacks, linux/amd64)
+        # Override via the docker.image.name property — the pom sets
+        # <image><name>${docker.image.name}</name> explicitly, so the
+        # -Dspring-boot.build-image.imageName user-property is ignored
+        # (explicit mojo config wins); only the property expression overrides.
         run: >-
           ./mvnw -B -Pnative spring-boot:build-image
           -DskipTests
-          -Dspring-boot.build-image.imageName=${{ env.IMAGE }}
+          -Ddocker.image.name=${{ env.IMAGE }}
 
       - name: Push image to Artifact Registry
         run: docker push ${{ env.IMAGE }}

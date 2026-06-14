@@ -23,9 +23,11 @@
     <google-java-format.version>1.35.0</google-java-format.version>
     <!--
       Default container image coordinates. Replace the project id locally, or
-      override the whole ref in CI via -Dspring-boot.build-image.imageName=...
-      (CI uses the GCP project id from the GCP_PROJECT_ID GitHub Secret and tags
-      with the commit SHA for immutable deploys).
+      override the whole ref in CI via -Ddocker.image.name=... (the build-image
+      <name> below is bound to this property; the plugin's own
+      spring-boot.build-image.imageName user-property does NOT override an
+      explicit <name>). CI passes the GCP project id from the GCP_PROJECT_ID
+      GitHub Secret and tags with the commit SHA for immutable deploys.
     -->
     <docker.image.name>us-east4-docker.pkg.dev/your-gcp-project-id/cbk-api-service/api:latest</docker.image.name>
   </properties>
