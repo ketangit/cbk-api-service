@@ -21,8 +21,11 @@ public class CorsConfig {
   private static final List<String> ALLOWED_ORIGIN_PATTERNS =
       List.of(
           "https://craftedbyk.com",
-          // Firebase Hosting preview channels: craftedbyk-prod--<channel>-<hash>.web.app
-          "https://craftedbyk-prod--*.web.app",
+          // Firebase default live domain
+          "https://craftedbyk-prod.firebaseapp.com",
+          // Live (craftedbyk-prod.web.app) + preview channels
+          // (craftedbyk-prod--<channel>-<hash>.web.app)
+          "https://craftedbyk-prod*.web.app",
           "http://localhost:3000");
 
   private static final List<String> ALLOWED_METHODS =
