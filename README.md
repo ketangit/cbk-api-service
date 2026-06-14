@@ -60,10 +60,10 @@ Default-deny token permissions; all actions pinned to commit SHAs.
 
 | Action                              | Version | Commit SHA                                 |
 | ----------------------------------- | ------- | ------------------------------------------ |
-| actions/checkout                    | v4.2.2  | `11bd71901bbe5b1630ceea73d27597364c9af683` |
-| actions/setup-java                  | v4.7.1  | `c5195efecf7bdfc987ee8bae7a71cb8b11521c00` |
-| google-github-actions/auth          | v2.1.13 | `c200f3691d83b41bf9bbd8638997a462592937ed` |
-| google-github-actions/deploy-cloudrun | v2.7.6 | `251330ba9a8a34bfbc1622895f42e1d53fd14522` |
+| actions/checkout                    | v6.0.3  | `df4cb1c069e1874edd31b4311f1884172cec0e10` |
+| actions/setup-java                  | v5.2.0  | `be666c2fcd27ec809703dec50e508c2fdc7f6654` |
+| google-github-actions/auth          | v3      | `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093` |
+| google-github-actions/deploy-cloudrun | v3    | `2028e2d7d30a78c6910e0632e48dd561b064884d` |
 
 ### GCP configuration
 
