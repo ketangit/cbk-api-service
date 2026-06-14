@@ -127,3 +127,6 @@ jobs:
           region: ${{ env.GCP_REGION }}
           image: ${{ env.IMAGE }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+          # Public service (serves the site + API). Declaratively asserts the
+          # allUsers -> roles/run.invoker binding so it can't drift between deploys.
+          flags: '--allow-unauthenticated'
