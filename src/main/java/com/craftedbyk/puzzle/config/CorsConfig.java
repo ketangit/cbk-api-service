@@ -10,15 +10,20 @@ import org.springframework.web.filter.CorsFilter;
 /**
  * Global CORS policy.
  *
- * <p>Allows the production site and local Next.js dev server to call the API. Origins are matched
- * exactly (no wildcards) so credentials can be supported safely. Adjust {@code ALLOWED_ORIGINS}
- * when adding new front-end origins.
+ * <p>Allows the production site, Firebase Hosting preview channels, and the local Next.js dev
+ * server to call the API. Patterns are used (not exact origins) so the dynamic per-PR preview
+ * subdomains are covered; {@code allowedOriginPatterns} supports credentials safely. Adjust
+ * {@code ALLOWED_ORIGIN_PATTERNS} when adding new front-end origins.
  */
 @Configuration
 public class CorsConfig {
 
-  private static final List<String> ALLOWED_ORIGINS =
-      List.of("https://craftedbyk.com", "http://localhost:3000");
+  private static final List<String> ALLOWED_ORIGIN_PATTERNS =
+      List.of(
+          "https://craftedbyk.com",
+          // Firebase Hosting preview channels: craftedbyk-prod--<channel>-<hash>.web.app
+          "https://craftedbyk-prod--*.web.app",
+          "http://localhost:3000");
 
   private static final List<String> ALLOWED_METHODS =
       List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
@@ -26,7 +31,7 @@ public class CorsConfig {
   @Bean
   public CorsFilter corsFilter() {
     CorsConfiguration config = new CorsConfiguration();
-    config.setAllowedOrigins(ALLOWED_ORIGINS);
+    config.setAllowedOriginPatterns(ALLOWED_ORIGIN_PATTERNS);
     config.setAllowedMethods(ALLOWED_METHODS);
     config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
     config.setExposedHeaders(List.of("Location"));
