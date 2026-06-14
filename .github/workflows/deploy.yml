@@ -99,10 +99,13 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Compose image reference
+        id: compose-image
         # Immutable, content-addressable tag (commit SHA) instead of :latest.
-        # Built here (not in top-level env) because it embeds the secret project id.
+        # Emitted as a step output (not top-level env) because it embeds the
+        # secret project id.
         run: |
-          echo "IMAGE=${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${CLOUD_RUN_SERVICE}/api:${{ github.sha }}" >> "$GITHUB_ENV"
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${CLOUD_RUN_SERVICE}/api:${{ github.sha }}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
@@ -115,17 +118,17 @@ jobs:
         run: >-
           ./mvnw -B -Pnative spring-boot:build-image
           -DskipTests
-          -Ddocker.image.name=${{ env.IMAGE }}
+          -Ddocker.image.name=${{ steps.compose-image.outputs.image }}
 
       - name: Push image to Artifact Registry
-        run: docker push ${{ env.IMAGE }}
+        run: docker push ${{ steps.compose-image.outputs.image }}
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3
         with:
           service: ${{ env.CLOUD_RUN_SERVICE }}
           region: ${{ env.GCP_REGION }}
-          image: ${{ env.IMAGE }}
+          image: ${{ steps.compose-image.outputs.image }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           # Public service (serves the site + API). Declaratively asserts the
           # allUsers -> roles/run.invoker binding so it can't drift between deploys.
