@@ -1,6 +1,15 @@
 spring:
   application:
     name: cbk-api-service
+  jpa:
+    properties:
+      # Disable Hibernate ORM's Bean Validation integration. Our constraints
+      # (@NotBlank/@Email/@Valid) live on web DTOs and are enforced by Spring MVC;
+      # no @Entity carries constraints. Left on, Hibernate boots a ValidatorFactory
+      # at SessionFactory init, whose jboss-logging proxy (Log_$logger) is pruned by
+      # the GraalVM native image and crashes startup ("logger implementation not
+      # found"). NONE skips that path; web validation is unaffected.
+      jakarta.persistence.validation.mode: none
 
 # Firebase App Check + Auth token verification. project-id/number are NOT
 # hardcoded (repo policy) — set FIREBASE_PROJECT_ID / FIREBASE_PROJECT_NUMBER in
