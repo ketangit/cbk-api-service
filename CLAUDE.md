@@ -24,9 +24,15 @@ non-obvious or easy to get wrong.
 - **Push to `main` auto-deploys to Cloud Run** (build native image → Artifact Registry → deploy).
   This is outward-facing and live — treat merges to `main` as production deploys. PRs skip deploy.
 - Auth is keyless via Workload Identity Federation. Sensitive GCP identifiers live in **GitHub
-  Secrets** (`GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_SERVICE_ACCOUNT`) — never hardcode them in
-  the workflow, `pom.xml`, or README. The project id is genericized to `your-gcp-project-id` in
-  source on purpose; keep it that way.
+  Secrets** (`GCP_PROJECT_ID`, `GCP_PROJECT_NUMBER`, `GCP_WIF_PROVIDER`, `GCP_SERVICE_ACCOUNT`) —
+  never hardcode them in the workflow, `pom.xml`, or README. The project id is genericized to
+  `your-gcp-project-id` in source on purpose; keep it that way.
+- **Firebase env vars are injected at deploy time**, not hardcoded. `deploy.yml` sets
+  `FIREBASE_PROJECT_ID` (= the `GCP_PROJECT_ID` secret — a Firebase project *is* a GCP project) and
+  `FIREBASE_PROJECT_NUMBER` (= `GCP_PROJECT_NUMBER` secret) via the `deploy-cloudrun` `env_vars`
+  input with `env_vars_update_strategy: merge`. Both default empty in `application.yml`, so a
+  deploy that forgets them silently disables nothing (gates stay on but have no audience) — keep
+  the secret + wiring in sync.
 
 ## Git workflow
 
@@ -37,6 +43,17 @@ non-obvious or easy to get wrong.
 
 - Java package root is `com.craftedbyk.puzzle` (the entry class is still named
   `FractalPuzzleApplication` for historical reasons).
+- **Firebase token gates live in `config/`.** Two `OncePerRequestFilter`s, ordered after
+  `RateLimitFilter`: `AppCheckFilter` (`@Order(2)`) requires an `X-Firebase-AppCheck` token on every
+  `/api/**` (except `/api/puzzle/health` + OPTIONS); `AuthFilter` (`@Order(3)`) requires a Bearer
+  Firebase ID token on `POST /api/orders` and stashes the uid in the `firebaseUid` request
+  attribute. Both verify tokens as plain RS256 JWTs via `JwtVerifier` (nimbus-jose-jwt against
+  Google's public JWKS) — **deliberately not firebase-admin**, which fights the GraalVM native
+  build. Verifiers are built lazily so disabled gates / tests never open a JWKS client.
+- Gates are toggled by `APPCHECK_ENABLED` / `AUTH_ENABLED` (default `true`). `src/test/resources/
+  application.yml` sets both `false` so the test slice never reaches Firebase.
 - **Known open security finding — do not widen it:** `GET /api/orders/{ref}` (`shop/ShopController`)
-  returns full customer PII with no auth, guarded only by an unguessable UUID capability ref. Auth +
-  ownership checks are still owed before treating this as production-safe.
+  returns full customer PII guarded only by an unguessable UUID capability ref. App Check now fronts
+  it (no raw non-browser access), but there is still **no per-user ownership check** — any caller
+  with the ref and a valid App Check token reads the PII. Ownership is still owed before treating
+  this as production-safe.

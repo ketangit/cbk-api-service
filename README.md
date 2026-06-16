@@ -53,6 +53,33 @@ build/push/deploy job. No manual `gcloud` steps in the normal flow.
 `https://craftedbyk.com` and `http://localhost:3000` (credentials enabled, no
 wildcards). Add new front-end origins there.
 
+## Security — Firebase App Check + Auth
+
+Two servlet filters in `config/` gate `/api/**`, verifying Firebase tokens as
+plain RS256 JWTs (via `nimbus-jose-jwt` / `JwtVerifier` against Google's public
+JWKS — **not** the firebase-admin SDK, which fights the GraalVM native build):
+
+| Filter | Order | Guards | Requires |
+| ------ | ----- | ------ | -------- |
+| `AppCheckFilter` | 2 | every `/api/**` except `/api/puzzle/health` + OPTIONS | `X-Firebase-AppCheck` token |
+| `AuthFilter`     | 3 | `POST /api/orders` | `Authorization: Bearer <Firebase ID token>` |
+
+App Check answers *"is this our app?"* (blocks raw `*.run.app` hits from
+curl/scrapers); Auth answers *"who is the user?"* (exposes the verified uid as
+the `firebaseUid` request attribute). Config lives in `FirebaseSecurityProperties`
+(`cbk.security.*`), driven by env vars:
+
+| Env var | Maps to | Default |
+| ------- | ------- | ------- |
+| `FIREBASE_PROJECT_ID`     | ID-token audience/issuer | _(empty)_ |
+| `FIREBASE_PROJECT_NUMBER` | App Check audience/issuer | _(empty)_ |
+| `APPCHECK_ENABLED`        | toggle App Check gate | `true` |
+| `AUTH_ENABLED`            | toggle Auth gate | `true` |
+
+For local runs that don't go through Firebase, set `APPCHECK_ENABLED=false` and
+`AUTH_ENABLED=false` (the test config already does). In production both project
+values are injected by `deploy.yml` from GitHub Secrets — see GCP configuration.
+
 ## CI/CD — `.github/workflows/deploy.yml`
 
 Default-deny token permissions; all actions pinned to commit SHAs.
@@ -86,9 +113,15 @@ variables → Actions), not committed to the workflow:
 
 | Secret                | Holds                                           |
 | --------------------- | ----------------------------------------------- |
-| `GCP_PROJECT_ID`      | GCP project id                                  |
+| `GCP_PROJECT_ID`      | GCP project id (also used as `FIREBASE_PROJECT_ID`) |
+| `GCP_PROJECT_NUMBER`  | GCP project number (used as `FIREBASE_PROJECT_NUMBER`) |
 | `GCP_WIF_PROVIDER`    | Full Workload Identity Federation provider path |
 | `GCP_SERVICE_ACCOUNT` | Deploy service-account email                    |
+
+`deploy.yml` injects `FIREBASE_PROJECT_ID` (= `GCP_PROJECT_ID`) and
+`FIREBASE_PROJECT_NUMBER` (= `GCP_PROJECT_NUMBER`) into the Cloud Run service via
+the `deploy-cloudrun` `env_vars` input (`env_vars_update_strategy: merge`) — a
+Firebase project *is* a GCP project, so the id is shared.
 
 Non-sensitive values stay inline in `deploy.yml`:
 
@@ -113,7 +146,8 @@ src/
     java/com/craftedbyk/puzzle/
       FractalPuzzleApplication.java   # entry point
       api/        # PuzzleController, request/response records, exception handler
-      config/     # CorsConfig, SecurityHeadersFilter, RateLimitFilter, WebConfig
+      config/     # CorsConfig, RateLimitFilter, Firebase App Check + Auth filters
+                  #   (AppCheckFilter, AuthFilter, JwtVerifier, FirebaseSecurityProperties)
       generator/  # fractal jigsaw geometry + RNG (SinRandom / SecureRandomSource)
       service/    # PuzzleService, PricingService, ExportMode, GeneratedPuzzle
       shop/       # catalog + orders (controller, JPA entities, repositories)
