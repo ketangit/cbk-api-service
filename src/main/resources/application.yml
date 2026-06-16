@@ -2,6 +2,17 @@ spring:
   application:
     name: cbk-api-service
 
+# Firebase App Check + Auth token verification. project-id/number are NOT
+# hardcoded (repo policy) — set FIREBASE_PROJECT_ID / FIREBASE_PROJECT_NUMBER in
+# the Cloud Run env. Both gates default on; flip *_ENABLED=false for a local run
+# that doesn't go through Firebase.
+cbk:
+  security:
+    project-id: ${FIREBASE_PROJECT_ID:}
+    project-number: ${FIREBASE_PROJECT_NUMBER:}
+    app-check-enabled: ${APPCHECK_ENABLED:true}
+    auth-enabled: ${AUTH_ENABLED:true}
+
 server:
   port: ${PORT:8080} # Cloud Run injects PORT; default 8080 for local runs.
   shutdown: graceful

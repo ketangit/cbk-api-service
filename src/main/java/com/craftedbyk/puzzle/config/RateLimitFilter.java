@@ -49,7 +49,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             || ("POST".equalsIgnoreCase(request.getMethod()) && path.equals("/api/orders"));
     int capacity = heavy ? HEAVY_PER_MIN : GENERAL_PER_MIN;
     ConcurrentHashMap<String, Bucket> buckets = heavy ? heavyBuckets : generalBuckets;
-    Bucket bucket = buckets.computeIfAbsent(request.getRemoteAddr(), k -> new Bucket(capacity));
+    Bucket bucket = buckets.computeIfAbsent(clientIp(request), k -> new Bucket(capacity));
 
     if (!bucket.tryConsume(capacity)) {
       response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
@@ -58,6 +58,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
       return;
     }
     chain.doFilter(request, response);
+  }
+
+  /**
+   * Best-effort client IP for keying buckets. Behind Cloud Run the originating client is the first
+   * entry of {@code X-Forwarded-For}; falls back to the socket address (the Google front-end proxy,
+   * which collapses everyone into one bucket). Note XFF is client-supplied and spoofable without a
+   * trusted-proxy hop count — acceptable for this blunt limiter; spoof-resistant per-IP enforcement
+   * belongs at the edge (Cloud Armor), out of scope on the free tier.
+   */
+  private static String clientIp(HttpServletRequest request) {
+    String xff = request.getHeader("X-Forwarded-For");
+    if (xff != null && !xff.isBlank()) {
+      int comma = xff.indexOf(',');
+      String first = (comma >= 0 ? xff.substring(0, comma) : xff).trim();
+      if (!first.isEmpty()) {
+        return first;
+      }
+    }
+    return request.getRemoteAddr();
   }
 
   /** Lazily-refilled token bucket; one token per request, refilled over the window. */

@@ -28,6 +28,12 @@ public class CustomerOrder {
   @Column(unique = true, nullable = false, updatable = false)
   private String publicRef;
 
+  /**
+   * Firebase Auth uid of the user who placed the order, when present. Nullable for legacy/anonymous
+   * paths; never serialized to clients.
+   */
+  private String uid;
+
   private Instant createdAt;
   private String customerName;
   private String email;
@@ -67,6 +73,15 @@ public class CustomerOrder {
   /** Transition to PAID. Call only after a payment provider confirms payment. */
   public void markPaid() {
     this.status = "PAID";
+  }
+
+  public void setUid(String uid) {
+    this.uid = uid;
+  }
+
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public String getUid() {
+    return uid;
   }
 
   public void addItem(OrderItem item) {

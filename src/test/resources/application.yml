@@ -1,0 +1,7 @@
+# Tests exercise the controllers directly and cannot mint real Firebase tokens,
+# so the App Check / Auth gates are off here. AppCheckFilterTest re-enables them
+# per-test via @SpringBootTest(properties=...) to assert the 401 paths.
+cbk:
+  security:
+    app-check-enabled: false
+    auth-enabled: false

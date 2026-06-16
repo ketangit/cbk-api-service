@@ -1,6 +1,7 @@
 package com.craftedbyk.puzzle.shop;
 
 import com.craftedbyk.puzzle.api.PuzzleRequest;
+import com.craftedbyk.puzzle.config.AuthFilter;
 import com.craftedbyk.puzzle.generator.PuzzleSpec;
 import com.craftedbyk.puzzle.service.GeneratedPuzzle;
 import com.craftedbyk.puzzle.service.PricingService;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -79,7 +81,9 @@ public class ShopController {
 
   @PostMapping("/orders")
   @Transactional
-  public OrderConfirmation createOrder(@Valid @RequestBody OrderRequest request) {
+  public OrderConfirmation createOrder(
+      @Valid @RequestBody OrderRequest request,
+      @RequestAttribute(name = AuthFilter.UID_ATTRIBUTE, required = false) String uid) {
     CustomerOrder order =
         new CustomerOrder(
             request.customerName(),
@@ -88,6 +92,7 @@ public class ShopController {
             request.city(),
             request.postalCode(),
             request.country());
+    order.setUid(uid);
     long total = 0;
     for (OrderItemRequest item : request.items()) {
       OrderItem entity;

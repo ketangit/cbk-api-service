@@ -36,7 +36,8 @@ public class CorsConfig {
     CorsConfiguration config = new CorsConfiguration();
     config.setAllowedOriginPatterns(ALLOWED_ORIGIN_PATTERNS);
     config.setAllowedMethods(ALLOWED_METHODS);
-    config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
+    config.setAllowedHeaders(
+        List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Firebase-AppCheck"));
     config.setExposedHeaders(List.of("Location"));
     config.setAllowCredentials(true);
     config.setMaxAge(3600L);

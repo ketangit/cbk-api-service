@@ -130,6 +130,14 @@ jobs:
           region: ${{ env.GCP_REGION }}
           image: ${{ steps.compose-image.outputs.image }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+          # Firebase App Check + Auth identifiers. A Firebase project IS a GCP
+          # project, so the project id reuses GCP_PROJECT_ID; the number is its
+          # own secret. Kept out of source per repo policy. `merge` preserves any
+          # other env vars already on the service (e.g. APPCHECK_ENABLED).
+          env_vars: |
+            FIREBASE_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            FIREBASE_PROJECT_NUMBER=${{ secrets.GCP_PROJECT_NUMBER }}
+          env_vars_update_strategy: merge
           # Public service (serves the site + API). Declaratively asserts the
           # allUsers -> roles/run.invoker binding so it can't drift between deploys.
           flags: '--allow-unauthenticated'
