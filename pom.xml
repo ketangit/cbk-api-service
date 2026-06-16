@@ -21,6 +21,8 @@
     <!-- Versions of build-only plugins not managed by the Spring Boot parent. -->
     <spotless-maven-plugin.version>3.6.0</spotless-maven-plugin.version>
     <google-java-format.version>1.35.0</google-java-format.version>
+    <!-- Not managed by the Spring Boot BOM (only pulled transitively by Spring Security). -->
+    <nimbus-jose-jwt.version>10.9.1</nimbus-jose-jwt.version>
     <!--
       Default container image coordinates. Replace the project id locally, or
       override the whole ref in CI via -Ddocker.image.name=... (the build-image
@@ -53,6 +55,18 @@
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
       <scope>runtime</scope>
+    </dependency>
+    <!--
+      Verify Firebase App Check + Auth ID tokens as plain RS256 JWTs against
+      Google's public JWKS endpoints. Deliberately NOT the firebase-admin SDK:
+      that pulls gRPC/Netty/Guava and heavy reflection that fights the GraalVM
+      native-image build; nimbus is light and Spring already ships native hints
+      for it. Version is managed by the Spring Boot dependencies BOM.
+    -->
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+      <version>${nimbus-jose-jwt.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
